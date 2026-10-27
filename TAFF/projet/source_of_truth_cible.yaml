@@ -30,7 +30,50 @@ sites:
         cidr: 10.0.40.0/24
         vrf: cloud
 
+  # Profil B -- Entreprise SaaS (préfixes métier, arbitrés en M1)
+  - name: lyon
+    role: profile-b-headquarters
+    prefixes:
+      - name: users-lyon
+        cidr: 10.40.10.0/23 # profil : /24, insuffisant pour 250 x2 utilisateurs
+        vrf: users
+      - name: vpn-remote
+        cidr: 10.40.12.0/24 # profil : 10.40.10.128/25, chevauchait users-lyon
+        vrf: remote
+      - name: admin
+        cidr: 10.40.250.0/24
+        vrf: admin
+  - name: datacenter
+    role: profile-b-private-dc
+    prefixes:
+      - name: dc-servers
+        cidr: 10.50.0.0/22 # hypothèse H3 (absent du profil)
+        vrf: prod
+      - name: dmz-api
+        cidr: 10.50.20.0/24
+        vrf: dmz
+  - name: cloud-public
+    role: profile-b-production
+    prefixes:
+      - name: cloud-prod
+        cidr: 10.60.0.0/20
+        vrf: cloud
+  - name: partner
+    role: profile-b-external
+    prefixes:
+      - name: partner-api-client
+        cidr: 203.0.113.0/24 # hypothèse H5, plage de documentation (maquette)
+        vrf: partner
+
 vlans:
+  - id: 10
+    name: users-lyon
+    vni: 10010
+    vrf: users
+  - id: 12
+    name: vpn-remote
+    vni: 10012
+    vrf: remote
   - id: 30
     name: application
     vni: 10030
@@ -44,25 +87,88 @@ vlans:
     vni: 10140
     vrf: cloud
 
+# Matrice de flux du profil B (M1). Tout flux absent est refusé.
+# L'ancienne règle prod -> dmz tcp/443 est retirée : aucun flux métier du
+# profil B ne la justifie (la DMZ API appelle le Cloud, pas l'inverse).
 policies:
   - name: admin-to-infrastructure
     src: admin
     dst: transport
     service: tcp/22,443
     action: allow
-  - name: application-to-dmz-https
-    src: prod
+  - name: admin-to-users
+    src: admin
+    dst: users
+    service: tcp/22
+    action: allow
+  - name: admin-to-remote
+    src: admin
+    dst: remote
+    service: tcp/22
+    action: allow
+  - name: admin-to-prod
+    src: admin
+    dst: prod
+    service: tcp/22,443
+    action: allow
+  - name: admin-to-dmz
+    src: admin
     dst: dmz
+    service: tcp/22,443
+    action: allow
+  - name: admin-to-cloud
+    src: admin
+    dst: cloud
+    service: tcp/22,443
+    action: allow
+  - name: users-to-prod-https
+    src: users
+    dst: prod
     service: tcp/443
     action: allow
-  - name: application-to-cloud-https
+  - name: users-to-cloud-https
+    src: users
+    dst: cloud
+    service: tcp/443
+    action: allow
+  - name: remote-to-prod-https
+    src: remote
+    dst: prod
+    service: tcp/443
+    action: allow
+  - name: remote-to-cloud-https
+    src: remote
+    dst: cloud
+    service: tcp/443
+    action: allow
+  - name: prod-to-cloud-replication
     src: prod
     dst: cloud
+    service: tcp/443
+    action: allow
+  - name: dmz-to-cloud-api-backend
+    src: dmz
+    dst: cloud
+    service: tcp/443
+    action: allow
+  - name: partner-to-dmz-api-https
+    src: partner
+    dst: dmz
     service: tcp/443
     action: allow
   - name: deny-dmz-to-admin
     src: dmz
     dst: admin
+    service: any
+    action: deny
+  - name: deny-partner-to-any
+    src: partner
+    dst: any
+    service: any
+    action: deny
+  - name: default-deny
+    src: any
+    dst: any
     service: any
     action: deny
 
@@ -79,3 +185,9 @@ services:
   - name: app-cloud
     critical: true
     ha: true
+  - name: api-gateway # passerelle partenaire en DMZ API
+    critical: true
+    ha: false # point unique accepté en M1, à doubler (M6)
+  - name: bastion # accès admin MFA + journalisation
+    critical: true
+    ha: false # point unique accepté en M1, à doubler (M4)

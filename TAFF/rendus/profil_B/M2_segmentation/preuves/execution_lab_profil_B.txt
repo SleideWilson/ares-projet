@@ -1,0 +1,128 @@
+# Exécution de lab_profil_B.sh -- 2026-10-27T11:06:15+01:00 -- noyau 6.17.0-41-generic
+# Lancé via : unshare -Urnm (namespace utilisateur, sans root) ; code retour 0
+
+
+=== 1. Construction : un routeur aresb-fw, une VRF et un hôte par zone ===
+  admin    10.40.250.0/24   hôte 10.40.250.10  VRF vrf-admin    table 10
+  users    10.40.10.0/23    hôte 10.40.10.10   VRF vrf-users    table 20
+  remote   10.40.12.0/24    hôte 10.40.12.10   VRF vrf-remote   table 30
+  dc       10.50.0.0/22     hôte 10.50.0.10    VRF vrf-dc       table 40
+  dmz      10.50.20.0/24    hôte 10.50.20.10   VRF vrf-dmz      table 50
+  cloud    10.60.0.0/20     hôte 10.60.0.10    VRF vrf-cloud    table 60
+  partner  203.0.113.0/24   hôte 203.0.113.10  VRF vrf-partner  table 70
+
+=== 2. Fuite de routes inter-VRF limitée aux flux autorisés ===
+Table de la VRF partner : le partenaire ne connaît que la DMZ API.
+unreachable default metric 4278198272 
+10.50.20.0/24 dev fw-dmz scope link 
+203.0.113.0/24 dev fw-partner proto kernel scope link src 203.0.113.1 
+local 203.0.113.1 dev fw-partner proto kernel scope host src 203.0.113.1 
+broadcast 203.0.113.255 dev fw-partner proto kernel scope link src 203.0.113.1 
+
+Table de la VRF admin : l'administration connaît toutes les zones sauf partner.
+unreachable default metric 4278198272 
+10.40.10.0/23 dev fw-users scope link 
+10.40.12.0/24 dev fw-remote scope link 
+10.40.250.0/24 dev fw-admin proto kernel scope link src 10.40.250.1 
+local 10.40.250.1 dev fw-admin proto kernel scope host src 10.40.250.1 
+broadcast 10.40.250.255 dev fw-admin proto kernel scope link src 10.40.250.1 
+10.50.0.0/22 dev fw-dc scope link 
+10.50.20.0/24 dev fw-dmz scope link 
+10.60.0.0/20 dev fw-cloud scope link 
+
+Décision partner -> DMZ API :
+10.50.20.10 from 203.0.113.10 dev fw-dmz table 70 
+    cache iif fw-partner 
+Décision partner -> admin :
+RTNETLINK answers: No route to host
+
+=== 3. Policy nftables générée depuis la matrice de flux ===
+table inet aresb {
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		ct state established,related counter packets 0 bytes 0 accept
+		ct state invalid counter packets 0 bytes 0 drop
+		ip saddr 10.40.250.0/24 ip daddr 10.40.10.0/23 tcp dport 22 ct state new counter packets 0 bytes 0 accept comment "admin-to-users"
+		ip saddr 10.40.250.0/24 ip daddr 10.40.12.0/24 tcp dport 22 ct state new counter packets 0 bytes 0 accept comment "admin-to-remote"
+		ip saddr 10.40.250.0/24 ip daddr 10.50.0.0/22 tcp dport { 22, 443 } ct state new counter packets 0 bytes 0 accept comment "admin-to-dc"
+		ip saddr 10.40.250.0/24 ip daddr 10.50.20.0/24 tcp dport { 22, 443 } ct state new counter packets 0 bytes 0 accept comment "admin-to-dmz"
+		ip saddr 10.40.250.0/24 ip daddr 10.60.0.0/20 tcp dport { 22, 443 } ct state new counter packets 0 bytes 0 accept comment "admin-to-cloud"
+		ip saddr 10.40.10.0/23 ip daddr 10.50.0.0/22 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "users-to-dc"
+		ip saddr 10.40.10.0/23 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "users-to-cloud"
+		ip saddr 10.40.12.0/24 ip daddr 10.50.0.0/22 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "remote-to-dc"
+		ip saddr 10.40.12.0/24 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "remote-to-cloud"
+		ip saddr 10.50.0.0/22 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "dc-to-cloud"
+		ip saddr 10.50.20.0/24 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "dmz-to-cloud"
+		ip saddr 203.0.113.0/24 ip daddr 10.50.20.0/24 tcp dport 443 ct state new counter packets 0 bytes 0 accept comment "partner-to-dmz"
+		counter packets 0 bytes 0 comment "default-deny"
+	}
+}
+
+=== 4. Services de test (tcp/22 et tcp/443) dans chaque zone ===
+Écoute active sur tcp/22 443 dans les 7 zones.
+
+=== 5. Validation : matrice observée vs matrice M1 (7x7 zones, tcp/22 et 443) ===
+src\dst  admin     users     remote    dc        dmz       cloud     partner   
+admin    ·        22        22        22 443    22 443    22 443    -         
+users    -         ·        -         443       -         443       -         
+remote   -         -         ·        443       -         443       -         
+dc       -         -         -         ·        -         443       -         
+dmz      -         -         -         -         ·        443       -         
+cloud    -         -         -         -         -         ·        -         
+partner  -         -         -         -         443       -         ·        
+(cellule = ports TCP ouverts ; '-' = tout bloqué ; '!' = écart avec la matrice M1)
+RÉSULTAT : 0 écart, la policy appliquée est conforme à la matrice M1.
+
+Compteurs nftables après le test :
+		ct state established,related counter packets 79 bytes 4228 accept
+		ip saddr 10.40.250.0/24 ip daddr 10.40.10.0/23 tcp dport 22 ct state new counter packets 1 bytes 60 accept comment "admin-to-users"
+		ip saddr 10.40.250.0/24 ip daddr 10.40.12.0/24 tcp dport 22 ct state new counter packets 1 bytes 60 accept comment "admin-to-remote"
+		ip saddr 10.40.250.0/24 ip daddr 10.50.0.0/22 tcp dport { 22, 443 } ct state new counter packets 2 bytes 120 accept comment "admin-to-dc"
+		ip saddr 10.40.250.0/24 ip daddr 10.50.20.0/24 tcp dport { 22, 443 } ct state new counter packets 2 bytes 120 accept comment "admin-to-dmz"
+		ip saddr 10.40.250.0/24 ip daddr 10.60.0.0/20 tcp dport { 22, 443 } ct state new counter packets 2 bytes 120 accept comment "admin-to-cloud"
+		ip saddr 10.40.10.0/23 ip daddr 10.50.0.0/22 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "users-to-dc"
+		ip saddr 10.40.10.0/23 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "users-to-cloud"
+		ip saddr 10.40.12.0/24 ip daddr 10.50.0.0/22 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "remote-to-dc"
+		ip saddr 10.40.12.0/24 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "remote-to-cloud"
+		ip saddr 10.50.0.0/22 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "dc-to-cloud"
+		ip saddr 10.50.20.0/24 ip daddr 10.60.0.0/20 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "dmz-to-cloud"
+		ip saddr 203.0.113.0/24 ip daddr 10.50.20.0/24 tcp dport 443 ct state new counter packets 1 bytes 60 accept comment "partner-to-dmz"
+		counter packets 66 bytes 3960 comment "default-deny"
+
+=== 6. Panne A : erreur de routage, une route partner -> admin fuit ===
+Route ajoutée par erreur : 10.40.250.0/24 dev fw-admin scope link 
+partner -> admin tcp/22 : -- ; tcp/443 : --
+Compteur default-deny : 66 -> 70 paquets
+Conclusion : le routage seul ne protège pas ; nftables bloque quand même (défense en profondeur).
+
+=== 7. Attaque : le partenaire usurpe une adresse admin ===
+partner (source usurpée 10.40.250.99) -> dmz tcp/443 : --
+Compteur spoof-partner : 0 -> 2 paquets (rejet en prerouting)
+Conclusion : une policy fondée sur les adresses exige un contrôle de la source par interface.
+
+=== 8. Panne B : route retour DMZ -> partner absente (asymétrie) ===
+Aller  : 10.50.20.10 from 203.0.113.10 dev fw-dmz table 70 
+Retour : RTNETLINK answers: No route to host
+Capture sur fw-dmz (le SYN-ACK de l'API arrive mais ne repart pas vers le partenaire) :
+  11:06:05.478425 IP 203.0.113.10.35004 > 10.50.20.10.443: Flags [S], seq 3973290188, win 64240, options [mss 1460,sackOK,TS val 2003803864 ecr 0,nop,wscale 10], length 0
+  11:06:05.478455 IP 10.50.20.10.443 > 203.0.113.10.35004: Flags [S.], seq 256707960, ack 3973290189, win 65160, options [mss 1460,sackOK,TS val 731877402 ecr 2003803864,nop,wscale 10], length 0
+  11:06:06.526532 IP 203.0.113.10.35004 > 10.50.20.10.443: Flags [S], seq 3973290188, win 64240, options [mss 1460,sackOK,TS val 2003804913 ecr 0,nop,wscale 10], length 0
+  11:06:06.526565 IP 10.50.20.10.443 > 203.0.113.10.35004: Flags [S.], seq 273084673, ack 3973290189, win 65160, options [mss 1460,sackOK,TS val 731878451 ecr 2003804913,nop,wscale 10], length 0
+partner -> dmz tcp/443 sans route retour : --
+Correction : rétablir la route retour dans la VRF dmz.
+partner -> dmz tcp/443 après correction : OK
+
+=== 9. Validation après correction ===
+src\dst  admin     users     remote    dc        dmz       cloud     partner   
+admin    ·        22        22        22 443    22 443    22 443    -         
+users    -         ·        -         443       -         443       -         
+remote   -         -         ·        443       -         443       -         
+dc       -         -         -         ·        -         443       -         
+dmz      -         -         -         -         ·        443       -         
+cloud    -         -         -         -         -         ·        -         
+partner  -         -         -         -         443       -         ·        
+(cellule = ports TCP ouverts ; '-' = tout bloqué ; '!' = écart avec la matrice M1)
+RÉSULTAT : 0 écart après correction.
+
+Conclusion : la VRF limite les chemins, nftables limite les flux, conntrack
+laisse passer les réponses, et chaque flux exige une route aller ET retour.
