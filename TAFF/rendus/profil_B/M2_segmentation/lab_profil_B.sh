@@ -66,7 +66,7 @@ cleanup() {
 }
 
 pause() {
-  if [[ ${DEMO_PAUSE:-0} != 0 && -t 0 ]]; then
+  if [[ ${PAUSE:-0} != 0 && -t 0 ]]; then
     read -r -p "Appuyez sur Entrée pour continuer... " _
   fi
 }

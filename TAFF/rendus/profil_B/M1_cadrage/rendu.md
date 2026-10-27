@@ -170,8 +170,7 @@ ses journaux au collecteur de la zone Admin.
   communes). Le profil le signale lui-même comme « chevauchement
   volontaire ».
 - **Interprétation** : un routeur qui connaît les deux préfixes choisira la
-  route la plus spécifique (LPM, démo
-  [`01-lpm.sh`](../../../../CM/demos/routage/01-lpm.sh)). Les postes Users
+  route la plus spécifique (longest prefix match). Les postes Users
   en .128 à .254 deviennent injoignables, ou le retour VPN part vers le LAN.
   Deux VRF distinctes ne suffisent pas non plus : les journaux admin ne
   permettraient plus d'identifier sans ambiguïté la source d'une session.
@@ -234,8 +233,7 @@ consommé.
 
 - un second chemin hybride indépendant (tunnel IPsec par Internet en
   secours du lien principal), avec basculement automatique par routage
-  (ECMP ou métriques, démo
-  [`08-redondance-liens.sh`](../../../../CM/demos/routage/08-redondance-liens.sh)) ;
+  (métriques de route ou ECMP) ;
 - à évaluer en M6 : déplacer la passerelle partenaire dans le Cloud
   (alternative 2), ce qui retire le lien hybride du chemin critique.
 

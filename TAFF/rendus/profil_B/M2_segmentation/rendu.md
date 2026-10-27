@@ -1,6 +1,6 @@
-# M2 -- Design dataplane et preuves de forwarding -- Profil B (Entreprise SaaS)
+# M2 -- Segmentation, dataplane Linux, policy enforcement -- Profil B (Entreprise SaaS)
 
-Livrable : appliquer réellement sur un dataplane Linux les zones et la matrice de
+Objectif : appliquer réellement sur un dataplane Linux les zones et la matrice de
 flux décidées en M1, puis prouver le chemin, la symétrie et la policy.
 
 - Script : [`lab_profil_B.sh`](lab_profil_B.sh)
@@ -19,9 +19,8 @@ flux décidées en M1, puis prouver le chemin, la symétrie et la policy.
   - l'administration passe uniquement par la zone Admin ;
   - l'outillage est Linux standard (iproute2, nftables), sans équipement
     dédié.
-- **Données reçues** : plan IP du profil B, matrice de flux M1, démos du cours
-  (`06-vrf.sh`, `07-nft-conntrack.sh`, `11-rp-filter.sh`). _Ajouter ici les
-  données distribuées en séance._
+- **Données reçues** : plan IP du profil B, matrice de flux M1.
+  _Ajouter ici les données distribuées en séance._
 - **Hypothèses ajoutées** :
   - H7 : un seul routeur Linux joue le rôle de point de contrôle entre toutes
     les zones. Dans ARESlabs, ce rôle est porté par `vm1-router` et
@@ -71,8 +70,8 @@ bout en bout, ce qui est nécessaire pour la journalisation des accès admin.
 - **Alternative 3** : des ACL sans état (`iptables`, sans conntrack).
   - **Pourquoi rejetée** : il faudrait ouvrir explicitement les retours
     (ports éphémères), ce qui double les règles et ouvre des ports hauts dans
-    l'autre sens. Le cours (démo 07) montre que conntrack résout ce problème
-    proprement.
+    l'autre sens. Le suivi d'état (conntrack) accepte automatiquement les
+    réponses des connexions autorisées, et seulement elles.
 
 ## 3. Justification
 
@@ -294,7 +293,7 @@ Toutes les preuves viennent de
   ARESlabs (deux routeurs reliés par un tunnel). Avec plusieurs routeurs, la
   symétrie devient plus délicate, car conntrack exige que l'aller et le
   retour passent par le **même** pare-feu. À traiter avec la redondance des
-  passerelles, par exemple VRRP plus `conntrackd` (démo 09).
+  passerelles, par exemple VRRP plus `conntrackd`.
 - **Limite connue 2** : la zone Internet et le NAT sortant (Users → Internet,
   Admin → mises à jour) prévus en M1 ne sont pas modélisés. Il manque aussi la
   journalisation des acceptations admin. Une règle `log` ne s'affiche pas
@@ -316,8 +315,8 @@ Toutes les preuves viennent de
 ```bash
 # Sur la maquette (root) :
 sudo ./lab_profil_B.sh | tee preuves/execution_lab_profil_B.txt
-# Mode pas à pas pour la démonstration :
-sudo DEMO_PAUSE=1 ./lab_profil_B.sh
+# Mode pas à pas (pause entre chaque étape) :
+sudo PAUSE=1 ./lab_profil_B.sh
 
 # Sans root (poste personnel, noyau avec VRF et nftables) :
 unshare -Urnm bash -c 'mount -t tmpfs tmpfs /run && mkdir -p /run/netns && ./lab_profil_B.sh'
