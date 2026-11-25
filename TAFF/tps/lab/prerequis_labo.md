@@ -50,8 +50,6 @@ Les paquets sont nécessaires au **TP3 seulement** ; ils ne changent pas les
 prérequis des TP1/TP2. Leurs éventuels services système ne sont pas utilisés
 par la maquette. Le TP3 lance ses propres instances dans les namespaces `tp3_*`,
 sans modifier `/etc/snmp`, les routes de l'hôte ou le filtrage des autres TP.
-Suivre le [corrigé enseignant TP3](../enseignant/TP3_corrige.md) pour la
-qualification HTTP/SNMP/NetFlow et le scénario d'incident.
 
 ## Préparation distincte pour le TP5
 
@@ -61,8 +59,7 @@ Terraform et le provider Libvirt **0.8.3** doivent être préchargés et verroui
 Ansible disponible sur le poste de contrôle, cloud-init présent dans l'image
 Ubuntu préparée avec Python 3, SSH et les outils de test. Le réseau de management,
 les réservations DHCP, le pool, l'image et le bridge OVS sont préparés avant la
-séance. Suivre le [corrigé TP5](../enseignant/TP5_corrige.md) pour la liste exacte
-et la qualification de bout en bout. Ces dépendances ne sont pas requises par
+séance. Ces dépendances ne sont pas requises par
 les TP1–TP4 ; ne pas utiliser leur reset pour le TP5.
 
 ## Verification
