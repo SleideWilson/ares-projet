@@ -29,6 +29,42 @@ sudo apt install -y frr prometheus grafana
 sudo dnf install -y frr prometheus grafana
 ```
 
+## Complément pour le TP3 uniquement
+
+Installer avant la séance, dans la VM de laboratoire (en plus du socle ci-dessus) :
+
+```bash
+sudo apt install -y snmp snmpd softflowd nfdump iperf3
+```
+
+Sur Fedora, les noms et disponibilités des paquets de flux dépendent des dépôts :
+préparer une image contenant `net-snmp`, `net-snmp-utils`, `softflowd`, `nfdump`
+et `iperf3`, puis vérifier les exécutables ci-dessous. L'image Debian/Ubuntu est
+le chemin de préparation documenté pour ce TP.
+
+```bash
+command -v snmpd snmpget snmpwalk softflowd nfcapd nfdump iperf3 tc
+```
+
+Les paquets sont nécessaires au **TP3 seulement** ; ils ne changent pas les
+prérequis des TP1/TP2. Leurs éventuels services système ne sont pas utilisés
+par la maquette. Le TP3 lance ses propres instances dans les namespaces `tp3_*`,
+sans modifier `/etc/snmp`, les routes de l'hôte ou le filtrage des autres TP.
+Suivre le [corrigé enseignant TP3](../enseignant/TP3_corrige.md) pour la
+qualification HTTP/SNMP/NetFlow et le scénario d'incident.
+
+## Préparation distincte pour le TP5
+
+Le TP5 requiert un hôte KVM/Libvirt/OVS et le
+[kit Terraform/cloud-init/Ansible](libvirt_ovs/automation/README.md).
+Terraform et le provider Libvirt **0.8.3** doivent être préchargés et verrouillés,
+Ansible disponible sur le poste de contrôle, cloud-init présent dans l'image
+Ubuntu préparée avec Python 3, SSH et les outils de test. Le réseau de management,
+les réservations DHCP, le pool, l'image et le bridge OVS sont préparés avant la
+séance. Suivre le [corrigé TP5](../enseignant/TP5_corrige.md) pour la liste exacte
+et la qualification de bout en bout. Ces dépendances ne sont pas requises par
+les TP1–TP4 ; ne pas utiliser leur reset pour le TP5.
+
 ## Verification
 
 ```bash
@@ -44,6 +80,7 @@ WireGuard est requis pour les manipulations du TP2 et optionnel pour les autres 
 
 ## Regles d'exploitation
 
-- Toujours lancer `sudo ./scripts/reset_lab.sh` avant de changer de TP technique.
+- Pour les maquettes TP1/TP2/VXLAN, utiliser leur reset commun avant de changer de topologie.
+- Pour le TP3, utiliser exclusivement `sudo python3 supervision/lab.py reset --results tp3-resultats` ; ne pas lancer le reset commun. Les mesures sont conservées.
 - Ne pas executer ces scripts sur une machine de production.
 - Lire les scripts avant execution si la VM contient d'autres labs reseau.
